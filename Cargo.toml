@@ -1,6 +1,6 @@
 [package]
 name = "pancakeswap-sdk"
-version = "0.1.0"
+version = "0.5.0"
 edition = "2024"
 authors = ["happyboy <superhappyboy1995@gmail.com>"]
 description = "pancakeswap sdk, Implemented functions related to interaction with pancakeswap."
