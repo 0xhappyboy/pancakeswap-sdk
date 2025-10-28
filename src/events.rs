@@ -15,6 +15,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use tokio::time::{Duration, MissedTickBehavior, interval};
 
+/// Configuration for event listener behavior
 #[derive(Debug, Clone)]
 pub struct EventListenerConfig {
     pub poll_interval_secs: u64,
@@ -37,6 +38,7 @@ struct EventListenerState {
     is_running: AtomicBool,
 }
 
+/// Event listener for PancakeSwap V2 and V3 events
 pub struct PancakeSwapEventListener {
     client: Arc<EvmClient>,
     config: EventListenerConfig,
@@ -44,6 +46,7 @@ pub struct PancakeSwapEventListener {
 }
 
 impl PancakeSwapEventListener {
+    /// Creates a new event listener with default configuration
     pub fn new(client: Arc<EvmClient>) -> Self {
         Self {
             client,
@@ -55,6 +58,7 @@ impl PancakeSwapEventListener {
         }
     }
 
+    /// Creates a new event listener with custom configuration
     pub fn with_config(client: Arc<EvmClient>, config: EventListenerConfig) -> Self {
         Self {
             client,
@@ -66,6 +70,23 @@ impl PancakeSwapEventListener {
         }
     }
 
+    /// Starts listening for Swap events from V2 pairs
+    ///
+    /// # Example
+    /// ```no_run
+    /// use ethers::types::Address;
+    /// use std::str::FromStr;
+    ///
+    /// let listener = PancakeSwapEventListener::new(client);
+    /// let pair_address = Address::from_str("0x...").unwrap();
+    ///
+    /// listener.start_swap_listener(
+    ///     vec![pair_address],
+    ///     |swap_event| {
+    ///         println!("Swap detected: {:?}", swap_event);
+    ///     }
+    /// ).await.unwrap();
+    /// ```
     pub async fn start_swap_listener(
         &self,
         pair_addresses: Vec<Address>,
@@ -79,6 +100,23 @@ impl PancakeSwapEventListener {
         .await
     }
 
+    // Starts listening for PairCreated events from factory contracts
+    ///
+    /// # Example
+    /// ```no_run
+    /// use ethers::types::Address;
+    /// use std::str::FromStr;
+    ///
+    /// let listener = PancakeSwapEventListener::new(client);
+    /// let factory_address = Address::from_str("0x...").unwrap();
+    ///
+    /// listener.start_pair_created_listener(
+    ///     vec![factory_address],
+    ///     |pair_event| {
+    ///         println!("New pair created: {:?}", pair_event);
+    ///     }
+    /// ).await.unwrap();
+    /// ```
     pub async fn start_pair_created_listener(
         &self,
         factory_addresses: Vec<Address>,
@@ -92,6 +130,7 @@ impl PancakeSwapEventListener {
         .await
     }
 
+    /// Starts listening for Mint events from V2 pairs
     pub async fn start_mint_listener(
         &self,
         pair_addresses: Vec<Address>,
@@ -105,6 +144,7 @@ impl PancakeSwapEventListener {
         .await
     }
 
+    /// Starts listening for Burn events from V2 pairs
     pub async fn start_burn_listener(
         &self,
         pair_addresses: Vec<Address>,
@@ -118,6 +158,23 @@ impl PancakeSwapEventListener {
         .await
     }
 
+    /// Starts listening for Swap events from V3 pools
+    ///
+    /// # Example
+    /// ```no_run
+    /// use ethers::types::Address;
+    /// use std::str::FromStr;
+    ///
+    /// let listener = PancakeSwapEventListener::new(client);
+    /// let pool_address = Address::from_str("0x...").unwrap();
+    ///
+    /// listener.start_v3_swap_listener(
+    ///     vec![pool_address],
+    ///     |swap_event| {
+    ///         println!("V3 Swap detected: {:?}", swap_event);
+    ///     }
+    /// ).await.unwrap();
+    /// ```
     pub async fn start_v3_swap_listener(
         &self,
         pool_addresses: Vec<Address>,
@@ -131,6 +188,7 @@ impl PancakeSwapEventListener {
         .await
     }
 
+    /// Starts listening for Mint events from V3 pools
     pub async fn start_v3_mint_listener(
         &self,
         pool_addresses: Vec<Address>,
@@ -144,6 +202,7 @@ impl PancakeSwapEventListener {
         .await
     }
 
+    /// Starts listening for Burn events from V3 pools
     pub async fn start_v3_burn_listener(
         &self,
         pool_addresses: Vec<Address>,
@@ -157,6 +216,7 @@ impl PancakeSwapEventListener {
         .await
     }
 
+    /// Internal method to start a generic event listener
     async fn start_listener(
         &self,
         addresses: Vec<Address>,
@@ -168,13 +228,10 @@ impl PancakeSwapEventListener {
                 "Listener already running".to_string(),
             ));
         }
-
         self.state.is_running.store(true, Ordering::SeqCst);
-
         let client = self.client.clone();
         let config = self.config.clone();
         let state = self.state.clone();
-
         let current_block =
             client.provider.get_block_number().await.map_err(|e| {
                 EvmError::ProviderError(format!("Failed to get block number: {}", e))
@@ -204,10 +261,12 @@ impl PancakeSwapEventListener {
         Ok(())
     }
 
+    /// Stops the event listener
     pub fn stop_listener(&self) {
         self.state.is_running.store(false, Ordering::SeqCst);
     }
 
+    /// Polls for new events in a range of blocks
     async fn poll_events(
         client: &EvmClient,
         state: &EventListenerState,
