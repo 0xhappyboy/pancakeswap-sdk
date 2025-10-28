@@ -1,3 +1,4 @@
+/// This module is the pancakeswap service entry module.
 pub mod abi;
 pub mod analytics;
 pub mod events;
