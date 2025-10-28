@@ -27,14 +27,14 @@ impl FactoryService {
     ///
     /// # Example
     /// ```
-    /// # use ethers::types::Address;
-    /// # use std::sync::Arc;
-    /// # let factory_service = FactoryService::new(Arc::clone(&client));
-    /// # let token_address = "0x...".parse::<Address>().unwrap();
-    /// # async {
+    /// use ethers::types::Address;
+    /// use std::sync::Arc;
+    /// let factory_service = FactoryService::new(Arc::clone(&client));
+    /// let token_address = "0x...".parse::<Address>().unwrap();
+    /// async {
     /// let pools = factory_service.get_pools_by_token(token_address).await?;
-    /// # Ok::<(), EvmError>(())
-    /// # };
+    /// Ok::<(), EvmError>(())
+    /// };
     /// ```
     pub async fn get_pools_by_token(
         &self,
@@ -132,16 +132,16 @@ impl FactoryService {
     ///
     /// # Example
     /// ```
-    /// # use ethers::types::Address;
-    /// # use std::sync::Arc;
-    /// # let factory_service = FactoryService::new(Arc::clone(&client));
-    /// # let factory_address = "0x...".parse::<Address>().unwrap();
-    /// # let token_a = "0x...".parse::<Address>().unwrap();
-    /// # let token_b = "0x...".parse::<Address>().unwrap();
-    /// # async {
+    /// use ethers::types::Address;
+    /// use std::sync::Arc;
+    /// let factory_service = FactoryService::new(Arc::clone(&client));
+    /// let factory_address = "0x...".parse::<Address>().unwrap();
+    /// let token_a = "0x...".parse::<Address>().unwrap();
+    /// let token_b = "0x...".parse::<Address>().unwrap();
+    /// async {
     /// let pair = factory_service.get_pair(factory_address, token_a, token_b).await?;
-    /// # Ok::<(), EvmError>(())
-    /// # };
+    /// Ok::<(), EvmError>(())
+    /// };
     /// ```
     pub async fn get_pair(
         &self,
@@ -167,16 +167,16 @@ impl FactoryService {
     ///
     /// # Example
     /// ```
-    /// # use ethers::types::Address;
-    /// # use std::sync::Arc;
-    /// # let factory_service = FactoryService::new(Arc::clone(&client));
-    /// # let factory_address = "0x...".parse::<Address>().unwrap();
-    /// # let token_a = "0x...".parse::<Address>().unwrap();
-    /// # let token_b = "0x...".parse::<Address>().unwrap();
-    /// # async {
+    /// use ethers::types::Address;
+    /// use std::sync::Arc;
+    /// let factory_service = FactoryService::new(Arc::clone(&client));
+    /// let factory_address = "0x...".parse::<Address>().unwrap();
+    /// let token_a = "0x...".parse::<Address>().unwrap();
+    /// let token_b = "0x...".parse::<Address>().unwrap();
+    /// async {
     /// let pair_address = factory_service.create_pair(factory_address, token_a, token_b).await?;
-    /// # Ok::<(), EvmError>(())
-    /// # };
+    /// Ok::<(), EvmError>(())
+    /// };
     /// ```
     pub async fn create_pair(
         &self,
@@ -219,14 +219,14 @@ impl FactoryService {
     ///
     /// # Example
     /// ```
-    /// # use ethers::types::Address;
-    /// # use std::sync::Arc;
-    /// # let factory_service = FactoryService::new(Arc::clone(&client));
-    /// # let factory_address = "0x...".parse::<Address>().unwrap();
-    /// # async {
+    /// use ethers::types::Address;
+    /// use std::sync::Arc;
+    /// let factory_service = FactoryService::new(Arc::clone(&client));
+    /// let factory_address = "0x...".parse::<Address>().unwrap();
+    /// async {
     /// let total_pairs = factory_service.all_pairs_length(factory_address).await?;
-    /// # Ok::<(), EvmError>(())
-    /// # };
+    /// Ok::<(), EvmError>(())
+    /// };
     /// ```
     pub async fn all_pairs_length(&self, factory_address: Address) -> Result<U256, EvmError> {
         let factory =
@@ -242,15 +242,15 @@ impl FactoryService {
     ///
     /// # Example
     /// ```
-    /// # use ethers::types::{Address, U256};
-    /// # use std::sync::Arc;
-    /// # let factory_service = FactoryService::new(Arc::clone(&client));
-    /// # let factory_address = "0x...".parse::<Address>().unwrap();
-    /// # let index = U256::from(0);
-    /// # async {
+    /// use ethers::types::{Address, U256};
+    /// use std::sync::Arc;
+    /// let factory_service = FactoryService::new(Arc::clone(&client));
+    /// let factory_address = "0x...".parse::<Address>().unwrap();
+    /// let index = U256::from(0);
+    /// async {
     /// let pair_address = factory_service.all_pairs(factory_address, index).await?;
-    /// # Ok::<(), EvmError>(())
-    /// # };
+    /// Ok::<(), EvmError>(())
+    /// };
     /// ```
     pub async fn all_pairs(
         &self,
@@ -321,16 +321,16 @@ impl FactoryService {
     ///
     /// # Example
     /// ```
-    /// # use ethers::types::Address;
-    /// # use std::sync::Arc;
-    /// # let factory_service = FactoryService::new(Arc::clone(&client));
-    /// # let factory_address = "0x...".parse::<Address>().unwrap();
-    /// # let token_a = "0x...".parse::<Address>().unwrap();
-    /// # let token_b = "0x...".parse::<Address>().unwrap();
-    /// # async {
+    /// use ethers::types::Address;
+    /// use std::sync::Arc;
+    /// let factory_service = FactoryService::new(Arc::clone(&client));
+    /// let factory_address = "0x...".parse::<Address>().unwrap();
+    /// let token_a = "0x...".parse::<Address>().unwrap();
+    /// let token_b = "0x...".parse::<Address>().unwrap();
+    /// async {
     /// let exists = factory_service.pair_exists(factory_address, token_a, token_b).await?;
-    /// # Ok::<(), EvmError>(())
-    /// # };
+    /// Ok::<(), EvmError>(())
+    /// };
     /// ```
     pub async fn pair_exists(
         &self,
