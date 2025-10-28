@@ -10,3 +10,11 @@ readme = "README.md"
 repository = "https://github.com/0xhappyboy/pancakeswap-sdk"
 
 [dependencies]
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+hex = "0.4"
+chrono = "0.4.42"
+primitive-types = "0.14.0"
+ethers = { version = "2.0", features = ["ws", "openssl"] }
+csv = "1.4.0"
