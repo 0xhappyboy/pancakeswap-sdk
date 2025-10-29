@@ -1,6 +1,7 @@
-use crate::{EvmError, PancakeSwapConfig, PancakeSwapService, price::PriceService};
+use crate::{PancakeSwapConfig, PancakeSwapService, price::PriceService};
 use ethers::types::{Address, U256};
 use evm_sdk::Evm;
+use evm_sdk::types::EvmError;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::time::{Duration, interval};
@@ -96,7 +97,7 @@ impl LimitOrderService {
             .get_current_price(router_address, token_in, token_out, amount_in)
             .await?;
         if current_price >= limit_price {
-            return Err(EvmError::LimitOrderError(
+            return Err(EvmError::Error(
                 "Current price is already better than limit price".to_string(),
             ));
         }
@@ -195,11 +196,9 @@ impl LimitOrderService {
         let order = self
             .pending_orders
             .get(&order_id)
-            .ok_or_else(|| EvmError::LimitOrderError("Order not found".to_string()))?;
+            .ok_or_else(|| EvmError::Error("Order not found".to_string()))?;
         if order.status != OrderStatus::Pending {
-            return Err(EvmError::LimitOrderError(
-                "Order is not pending".to_string(),
-            ));
+            return Err(EvmError::Error("Order is not pending".to_string()));
         }
         if std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -207,7 +206,7 @@ impl LimitOrderService {
             .as_secs()
             > order.expiry
         {
-            return Err(EvmError::LimitOrderError("Order has expired".to_string()));
+            return Err(EvmError::Error("Order has expired".to_string()));
         }
         let pancake_service = PancakeSwapService::new(self.evm.clone());
         let tx_hash = pancake_service
@@ -247,12 +246,12 @@ impl LimitOrderService {
                 order.status = OrderStatus::Cancelled;
                 Ok(())
             } else {
-                Err(EvmError::LimitOrderError(
+                Err(EvmError::Error(
                     "Cannot cancel non-pending order".to_string(),
                 ))
             }
         } else {
-            Err(EvmError::LimitOrderError("Order not found".to_string()))
+            Err(EvmError::Error("Order not found".to_string()))
         }
     }
 
@@ -314,7 +313,7 @@ impl LimitOrderService {
         let order = self
             .pending_orders
             .get(&order_id)
-            .ok_or_else(|| EvmError::LimitOrderError("Order not found".to_string()))?;
+            .ok_or_else(|| EvmError::Error("Order not found".to_string()))?;
         let current_price = self
             .get_current_price(
                 PancakeSwapConfig::v2_router_address(self.evm.client.evm_type.unwrap())?,

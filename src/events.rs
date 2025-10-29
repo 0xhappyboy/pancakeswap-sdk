@@ -1,4 +1,4 @@
-use crate::EvmError;
+use evm_sdk::types::EvmError;
 use crate::tool::event_parsers::{
     parse_burn_log, parse_mint_log, parse_pair_created_log, parse_swap_log, parse_v3_burn_log,
     parse_v3_mint_log, parse_v3_swap_log,

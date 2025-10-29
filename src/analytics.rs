@@ -1,4 +1,3 @@
-use crate::EvmError;
 use crate::PancakeSwapService;
 use crate::liquidity::LiquidityService;
 use crate::price::PriceService;
@@ -10,6 +9,7 @@ use ethers::{
 };
 use evm_client::EvmType;
 use evm_sdk::Evm;
+use evm_sdk::types::EvmError;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
@@ -216,9 +216,7 @@ impl AnalyticsService {
         let profit_percentage = (profit / test_amount.as_u128() as f64) * 100.0;
 
         if profit_percentage < min_profit_percentage {
-            return Err(EvmError::AnalyticsError(
-                "Profit below threshold".to_string(),
-            ));
+            return Err(EvmError::Error("Profit below threshold".to_string()));
         }
 
         let risk_level = self
@@ -277,7 +275,7 @@ impl AnalyticsService {
         liquidity_service
             .get_pair_info(factory_address, token_a, token_b)
             .await?
-            .ok_or_else(|| EvmError::AnalyticsError("Pair not found".to_string()))
+            .ok_or_else(|| EvmError::Error("Pair not found".to_string()))
     }
 
     async fn get_reserves(&self, pair_address: Address) -> Result<(U256, U256, u32), EvmError> {
@@ -342,7 +340,7 @@ impl AnalyticsService {
                 amounts
                     .last()
                     .cloned()
-                    .ok_or_else(|| EvmError::AnalyticsError("Invalid path".to_string()))
+                    .ok_or_else(|| EvmError::Error("Invalid path".to_string()))
             }
             RouterVersion::V3 => {
                 if path.len() < 2 {

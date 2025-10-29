@@ -1,4 +1,4 @@
-use crate::EvmError;
+use evm_sdk::types::EvmError;
 use crate::abi::{IMasterChefV2, IPancakePair, ISmartChefFactory, ISmartChefInitializable};
 use ethers::middleware::SignerMiddleware;
 use ethers::types::{Address, U256};

@@ -1,5 +1,4 @@
 use crate::{
-    EvmError,
     abi::IUniswapV3Factory,
     global::{
         BASE_FACTORY_V2, BASE_FACTORY_V3, BSC_FACTORY_V2, BSC_FACTORY_V3, ETHEREUM_FACTORY_V2,
@@ -12,6 +11,7 @@ use ethers::{
 };
 use evm_client::EvmType;
 use evm_sdk::Evm;
+use evm_sdk::types::EvmError;
 use std::sync::Arc;
 
 /// pancakeswap factory service
@@ -102,7 +102,8 @@ impl FactoryService {
             Some(EvmType::BASE_MAINNET) => BASE_FACTORY_V3.parse::<Address>().unwrap(),
             _ => return Err(EvmError::ConfigError("Unsupported chain".to_string())),
         };
-        let factory = IUniswapV3Factory::new(factory_address, Arc::clone(&self.evm.client.provider));
+        let factory =
+            IUniswapV3Factory::new(factory_address, Arc::clone(&self.evm.client.provider));
         let fee_tiers = vec![100, 500, 2500, 10000];
         let mut pools = Vec::new();
         let common_tokens = vec![match self.evm.client.evm_type {
@@ -193,7 +194,8 @@ impl FactoryService {
             return Err(EvmError::WalletError("No wallet configured".to_string()));
         }
         let wallet = self.evm.client.wallet.as_ref().unwrap();
-        let signer_middleware = SignerMiddleware::new(self.evm.client.provider.clone(), wallet.clone());
+        let signer_middleware =
+            SignerMiddleware::new(self.evm.client.provider.clone(), wallet.clone());
         let factory =
             crate::abi::IPancakeFactory::new(factory_address, Arc::new(signer_middleware));
         let tx = factory.create_pair(token_a, token_b);

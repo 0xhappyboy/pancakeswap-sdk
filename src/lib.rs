@@ -34,9 +34,9 @@ use crate::{
     liquidity::LiquidityService,
     price::PriceService,
     router::RouterService,
-    types::{EvmError, PriceInfo},
+    types::PriceInfo,
 };
-
+use evm_sdk::types::EvmError;
 /// PancakeSwap Service for interacting with PancakeSwap protocols
 pub struct PancakeSwapService {
     evm: Arc<Evm>,
