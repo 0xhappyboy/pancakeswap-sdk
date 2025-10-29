@@ -1,3 +1,4 @@
+use crate::EvmError;
 use crate::tool::event_parsers::{
     parse_burn_log, parse_mint_log, parse_pair_created_log, parse_swap_log, parse_v3_burn_log,
     parse_v3_mint_log, parse_v3_swap_log,
@@ -5,10 +6,10 @@ use crate::tool::event_parsers::{
 use crate::types::{
     BurnEvent, MintEvent, PairCreatedEvent, SwapEvent, V3BurnEvent, V3MintEvent, V3SwapEvent,
 };
-use crate::{EvmClient, EvmError};
 use ethers::providers::Middleware;
 use ethers::types::Address;
 use ethers::types::{Filter, ValueOrArray};
+use evm_sdk::Evm;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU64;
@@ -40,16 +41,16 @@ struct EventListenerState {
 
 /// Event listener for PancakeSwap V2 and V3 events
 pub struct PancakeSwapEventListener {
-    client: Arc<EvmClient>,
+    evm: Arc<Evm>,
     config: EventListenerConfig,
     state: Arc<EventListenerState>,
 }
 
 impl PancakeSwapEventListener {
     /// Creates a new event listener with default configuration
-    pub fn new(client: Arc<EvmClient>) -> Self {
+    pub fn new(evm: Arc<Evm>) -> Self {
         Self {
-            client,
+            evm: evm,
             config: EventListenerConfig::default(),
             state: Arc::new(EventListenerState {
                 last_block_number: AtomicU64::new(0),
@@ -59,9 +60,9 @@ impl PancakeSwapEventListener {
     }
 
     /// Creates a new event listener with custom configuration
-    pub fn with_config(client: Arc<EvmClient>, config: EventListenerConfig) -> Self {
+    pub fn with_config(evm: Arc<Evm>, config: EventListenerConfig) -> Self {
         Self {
-            client,
+            evm: evm,
             config,
             state: Arc::new(EventListenerState {
                 last_block_number: AtomicU64::new(0),
@@ -229,11 +230,11 @@ impl PancakeSwapEventListener {
             ));
         }
         self.state.is_running.store(true, Ordering::SeqCst);
-        let client = self.client.clone();
+        let evm = self.evm.clone();
         let config = self.config.clone();
         let state = self.state.clone();
         let current_block =
-            client.provider.get_block_number().await.map_err(|e| {
+            evm.client.provider.get_block_number().await.map_err(|e| {
                 EvmError::ProviderError(format!("Failed to get block number: {}", e))
             })?;
 
@@ -248,7 +249,7 @@ impl PancakeSwapEventListener {
 
             while state.is_running.load(Ordering::SeqCst) {
                 if let Err(e) =
-                    Self::poll_events(&client, &state, &config, &addresses, &event_name, &on_event)
+                    Self::poll_events(&evm, &state, &config, &addresses, &event_name, &on_event)
                         .await
                 {
                     eprintln!("Error polling events: {}", e);
@@ -268,7 +269,7 @@ impl PancakeSwapEventListener {
 
     /// Polls for new events in a range of blocks
     async fn poll_events(
-        client: &EvmClient,
+        evm: &Evm,
         state: &EventListenerState,
         config: &EventListenerConfig,
         addresses: &[Address],
@@ -277,7 +278,7 @@ impl PancakeSwapEventListener {
     ) -> Result<(), EvmError> {
         let from_block = state.last_block_number.load(Ordering::SeqCst) + 1;
         let current_block =
-            client.provider.get_block_number().await.map_err(|e| {
+            evm.client.provider.get_block_number().await.map_err(|e| {
                 EvmError::ProviderError(format!("Failed to get block number: {}", e))
             })?;
 
@@ -296,7 +297,8 @@ impl PancakeSwapEventListener {
             .address(ValueOrArray::Array(addresses.to_vec()))
             .event(event_name);
 
-        let logs = client
+        let logs = evm
+            .client
             .provider
             .get_logs(&filter)
             .await

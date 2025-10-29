@@ -1,5 +1,5 @@
 use crate::{
-    EvmClient, EvmError,
+    EvmError,
     abi::IUniswapV3Factory,
     global::{
         BASE_FACTORY_V2, BASE_FACTORY_V3, BSC_FACTORY_V2, BSC_FACTORY_V3, ETHEREUM_FACTORY_V2,
@@ -10,17 +10,19 @@ use ethers::{
     middleware::SignerMiddleware,
     types::{Address, H256, U256},
 };
+use evm_client::EvmType;
+use evm_sdk::Evm;
 use std::sync::Arc;
 
 /// pancakeswap factory service
 pub struct FactoryService {
-    client: Arc<EvmClient>,
+    evm: Arc<Evm>,
 }
 
 impl FactoryService {
     /// create a factory service
-    pub fn new(client: Arc<EvmClient>) -> Self {
-        Self { client }
+    pub fn new(evm: Arc<Evm>) -> Self {
+        Self { evm: evm }
     }
 
     /// Retrieves all liquidity pools (V2 and V3) for a given token address
@@ -55,14 +57,16 @@ impl FactoryService {
         &self,
         token_address: Address,
     ) -> Result<Vec<Address>, EvmError> {
-        let factory_address = match self.client.chain {
-            crate::EvmType::Bsc => BSC_FACTORY_V2.parse::<Address>().unwrap(),
-            crate::EvmType::Ethereum => ETHEREUM_FACTORY_V2.parse::<Address>().unwrap(),
-            crate::EvmType::Base => BASE_FACTORY_V2.parse::<Address>().unwrap(),
+        let factory_address = match self.evm.client.evm_type {
+            Some(EvmType::BSC_MAINNET) => BSC_FACTORY_V2.parse::<Address>().unwrap(),
+            Some(EvmType::ETHEREUM_MAINNET) => ETHEREUM_FACTORY_V2.parse::<Address>().unwrap(),
+            Some(EvmType::BASE_MAINNET) => BASE_FACTORY_V2.parse::<Address>().unwrap(),
             _ => return Err(EvmError::ConfigError("Unsupported chain".to_string())),
         };
-        let factory =
-            crate::abi::IPancakeFactory::new(factory_address, Arc::clone(&self.client.provider));
+        let factory = crate::abi::IPancakeFactory::new(
+            factory_address,
+            Arc::clone(&self.evm.client.provider),
+        );
         let total_pairs =
             factory.all_pairs_length().call().await.map_err(|e| {
                 EvmError::ContractError(format!("Failed to get total pairs: {}", e))
@@ -71,8 +75,10 @@ impl FactoryService {
         let max_check = 500u64;
         for i in 0..std::cmp::min(total_pairs.as_u64(), max_check) {
             if let Ok(pair_address) = factory.all_pairs(i.into()).call().await {
-                let pair =
-                    crate::abi::IPancakePair::new(pair_address, Arc::clone(&self.client.provider));
+                let pair = crate::abi::IPancakePair::new(
+                    pair_address,
+                    Arc::clone(&self.evm.client.provider),
+                );
                 if let Ok(token0) = pair.token_0().call().await {
                     if let Ok(token1) = pair.token_1().call().await {
                         if token0 == token_address || token1 == token_address {
@@ -82,7 +88,6 @@ impl FactoryService {
                 }
             }
         }
-
         Ok(pools)
     }
 
@@ -91,20 +96,20 @@ impl FactoryService {
         &self,
         token_address: Address,
     ) -> Result<Vec<Address>, EvmError> {
-        let factory_address = match self.client.chain {
-            crate::EvmType::Bsc => BSC_FACTORY_V3.parse::<Address>().unwrap(),
-            crate::EvmType::Ethereum => ETHEREUM_FACTORY_V3.parse::<Address>().unwrap(),
-            crate::EvmType::Base => BASE_FACTORY_V3.parse::<Address>().unwrap(),
+        let factory_address = match self.evm.client.evm_type {
+            Some(EvmType::BSC_MAINNET) => BSC_FACTORY_V3.parse::<Address>().unwrap(),
+            Some(EvmType::ETHEREUM_MAINNET) => ETHEREUM_FACTORY_V3.parse::<Address>().unwrap(),
+            Some(EvmType::BASE_MAINNET) => BASE_FACTORY_V3.parse::<Address>().unwrap(),
             _ => return Err(EvmError::ConfigError("Unsupported chain".to_string())),
         };
-        let factory = IUniswapV3Factory::new(factory_address, Arc::clone(&self.client.provider));
+        let factory = IUniswapV3Factory::new(factory_address, Arc::clone(&self.evm.client.provider));
         let fee_tiers = vec![100, 500, 2500, 10000];
         let mut pools = Vec::new();
-        let common_tokens = vec![match self.client.chain {
-            crate::EvmType::Bsc => "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"
+        let common_tokens = vec![match self.evm.client.evm_type {
+            Some(EvmType::BSC_MAINNET) => "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"
                 .parse()
                 .unwrap(), // WBNB
-            crate::EvmType::Ethereum => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+            Some(EvmType::ETHEREUM_MAINNET) => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
                 .parse()
                 .unwrap(), // WETH
             _ => Address::zero(),
@@ -150,7 +155,7 @@ impl FactoryService {
         token_b: Address,
     ) -> Result<Option<Address>, EvmError> {
         let factory =
-            crate::abi::IPancakeFactory::new(factory_address, self.client.provider.clone());
+            crate::abi::IPancakeFactory::new(factory_address, self.evm.client.provider.clone());
         let pair = factory
             .get_pair(token_a, token_b)
             .call()
@@ -184,11 +189,11 @@ impl FactoryService {
         token_a: Address,
         token_b: Address,
     ) -> Result<Address, EvmError> {
-        if self.client.wallet.is_none() {
+        if self.evm.client.wallet.is_none() {
             return Err(EvmError::WalletError("No wallet configured".to_string()));
         }
-        let wallet = self.client.wallet.as_ref().unwrap();
-        let signer_middleware = SignerMiddleware::new(self.client.provider.clone(), wallet.clone());
+        let wallet = self.evm.client.wallet.as_ref().unwrap();
+        let signer_middleware = SignerMiddleware::new(self.evm.client.provider.clone(), wallet.clone());
         let factory =
             crate::abi::IPancakeFactory::new(factory_address, Arc::new(signer_middleware));
         let tx = factory.create_pair(token_a, token_b);
@@ -230,7 +235,7 @@ impl FactoryService {
     /// ```
     pub async fn all_pairs_length(&self, factory_address: Address) -> Result<U256, EvmError> {
         let factory =
-            crate::abi::IPancakeFactory::new(factory_address, self.client.provider.clone());
+            crate::abi::IPancakeFactory::new(factory_address, self.evm.client.provider.clone());
         factory
             .all_pairs_length()
             .call()
@@ -258,7 +263,7 @@ impl FactoryService {
         index: U256,
     ) -> Result<Address, EvmError> {
         let factory =
-            crate::abi::IPancakeFactory::new(factory_address, self.client.provider.clone());
+            crate::abi::IPancakeFactory::new(factory_address, self.evm.client.provider.clone());
         factory.all_pairs(index).call().await.map_err(|e| {
             EvmError::ContractError(format!("Failed to get pair at index {}: {}", index, e))
         })
@@ -267,7 +272,7 @@ impl FactoryService {
     /// Get the fee receiving address
     pub async fn fee_to(&self, factory_address: Address) -> Result<Address, EvmError> {
         let factory =
-            crate::abi::IPancakeFactory::new(factory_address, self.client.provider.clone());
+            crate::abi::IPancakeFactory::new(factory_address, self.evm.client.provider.clone());
         factory
             .fee_to()
             .call()
@@ -278,7 +283,7 @@ impl FactoryService {
     /// Get the address of the person who set the fee
     pub async fn fee_to_setter(&self, factory_address: Address) -> Result<Address, EvmError> {
         let factory =
-            crate::abi::IPancakeFactory::new(factory_address, self.client.provider.clone());
+            crate::abi::IPancakeFactory::new(factory_address, self.evm.client.provider.clone());
         factory
             .fee_to_setter()
             .call()

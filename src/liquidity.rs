@@ -1,17 +1,17 @@
-use crate::{EvmClient, EvmError, PancakeSwapConfig};
+use crate::EvmError;
 use ethers::types::{Address, U256};
+use evm_sdk::Evm;
 use std::sync::Arc;
 
 /// Liquidity management service for DEX operations
 pub struct LiquidityService {
-    client: Arc<EvmClient>,
+    evm: Arc<Evm>,
 }
 
 impl LiquidityService {
-
     /// create liquidity service
-    pub fn new(client: Arc<EvmClient>) -> Self {
-        Self { client }
+    pub fn new(evm: Arc<Evm>) -> Self {
+        Self { evm: evm }
     }
 
     /// Retrieves the pair address for two tokens from a DEX factory
@@ -39,7 +39,7 @@ impl LiquidityService {
         token_b: Address,
     ) -> Result<Option<Address>, EvmError> {
         let factory =
-            crate::abi::IPancakeFactory::new(factory_address, self.client.provider.clone());
+            crate::abi::IPancakeFactory::new(factory_address, self.evm.client.provider.clone());
 
         factory
             .get_pair(token_a, token_b)
@@ -69,7 +69,7 @@ impl LiquidityService {
     /// }
     /// ```
     pub async fn get_reserves(&self, pair_address: Address) -> Result<(U256, U256, u32), EvmError> {
-        let pair = crate::abi::IPancakePair::new(pair_address, self.client.provider.clone());
+        let pair = crate::abi::IPancakePair::new(pair_address, self.evm.client.provider.clone());
 
         let (reserve0, reserve1, block_timestamp_last) = pair
             .get_reserves()
@@ -85,7 +85,7 @@ impl LiquidityService {
         &self,
         pair_address: Address,
     ) -> Result<(Address, Address), EvmError> {
-        let pair = crate::abi::IPancakePair::new(pair_address, self.client.provider.clone());
+        let pair = crate::abi::IPancakePair::new(pair_address, self.evm.client.provider.clone());
 
         let token0 = pair
             .token_0()
@@ -108,7 +108,7 @@ impl LiquidityService {
         pair_address: Address,
         user_address: Address,
     ) -> Result<U256, EvmError> {
-        let pair = crate::abi::IPancakePair::new(pair_address, self.client.provider.clone());
+        let pair = crate::abi::IPancakePair::new(pair_address, self.evm.client.provider.clone());
         pair.balance_of(user_address)
             .call()
             .await
@@ -117,7 +117,7 @@ impl LiquidityService {
 
     /// Gets the total supply of LP tokens for a pool
     pub async fn get_total_supply(&self, pair_address: Address) -> Result<U256, EvmError> {
-        let pair = crate::abi::IPancakePair::new(pair_address, self.client.provider.clone());
+        let pair = crate::abi::IPancakePair::new(pair_address, self.evm.client.provider.clone());
 
         pair.total_supply()
             .call()
@@ -189,7 +189,7 @@ impl LiquidityService {
         count: u64,
     ) -> Result<Vec<Address>, EvmError> {
         let factory =
-            crate::abi::IPancakeFactory::new(factory_address, self.client.provider.clone());
+            crate::abi::IPancakeFactory::new(factory_address, self.evm.client.provider.clone());
 
         let total_pairs =
             factory.all_pairs_length().call().await.map_err(|e| {

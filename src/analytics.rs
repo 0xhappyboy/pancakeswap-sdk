@@ -1,12 +1,15 @@
+use crate::EvmError;
+use crate::PancakeSwapService;
 use crate::liquidity::LiquidityService;
 use crate::price::PriceService;
-use crate::types::{PoolInfo, PriceInfo, RouterVersion};
-use crate::{EvmClient, EvmError, PancakeSwapService};
+use crate::types::RouterVersion;
 use ethers::types::{BlockNumber, Filter};
 use ethers::{
     providers::Middleware,
     types::{Address, U256},
 };
+use evm_client::EvmType;
+use evm_sdk::Evm;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
@@ -50,15 +53,15 @@ pub struct PriceHistory {
 
 /// Service for advanced analytics and data analysis
 pub struct AnalyticsService {
-    client: Arc<EvmClient>,
+    evm: Arc<Evm>,
     price_history: HashMap<Address, VecDeque<PriceHistory>>,
 }
 
 impl AnalyticsService {
     /// Creates a new AnalyticsService instance
-    pub fn new(client: Arc<EvmClient>) -> Self {
+    pub fn new(evm: Arc<Evm>) -> Self {
         Self {
-            client,
+            evm: evm,
             price_history: HashMap::new(),
         }
     }
@@ -90,7 +93,7 @@ impl AnalyticsService {
         pair_address: Address,
         base_token: Address,
     ) -> Result<PairAnalytics, EvmError> {
-        let liquidity_service = LiquidityService::new(self.client.clone());
+        let liquidity_service = LiquidityService::new(self.evm.clone());
         let pool_info = liquidity_service.get_pool_info(pair_address).await?;
         let (reserve0, reserve1, _) = liquidity_service.get_reserves(pair_address).await?;
         let liquidity = self
@@ -261,16 +264,16 @@ impl AnalyticsService {
         token_a: Address,
         token_b: Address,
     ) -> Result<Address, EvmError> {
-        let factory_address = match self.client.chain {
-            crate::EvmType::Bsc => "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73"
+        let factory_address = match self.evm.client.evm_type {
+            Some(EvmType::BSC_MAINNET) => "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73"
                 .parse()
                 .unwrap(),
-            crate::EvmType::Ethereum => "0x1097053Fd2ea711dad45caCcc45EfF7548fCB362"
+            Some(EvmType::ETHEREUM_MAINNET) => "0x1097053Fd2ea711dad45caCcc45EfF7548fCB362"
                 .parse()
                 .unwrap(),
             _ => return Err(EvmError::ConfigError("Unsupported chain".to_string())),
         };
-        let liquidity_service = LiquidityService::new(self.client.clone());
+        let liquidity_service = LiquidityService::new(self.evm.clone());
         liquidity_service
             .get_pair_info(factory_address, token_a, token_b)
             .await?
@@ -278,7 +281,7 @@ impl AnalyticsService {
     }
 
     async fn get_reserves(&self, pair_address: Address) -> Result<(U256, U256, u32), EvmError> {
-        let liquidity_service = LiquidityService::new(self.client.clone());
+        let liquidity_service = LiquidityService::new(self.evm.clone());
         liquidity_service.get_reserves(pair_address).await
     }
 
@@ -313,13 +316,13 @@ impl AnalyticsService {
         vec![
             "0x1b81D678ffb9C0263b24A97847620C99d213eB14"
                 .parse()
-                .unwrap(), // BSC Mainnet
+                .unwrap(),
             "0x13f4EA83D0bd40E75C8222255bc855a974568Dd4"
                 .parse()
-                .unwrap(), // 通用 V3
+                .unwrap(),
             "0x9a489505a00cE272eAa5e07Dba6491314CaE3796"
                 .parse()
-                .unwrap(), // BSC Testnet
+                .unwrap(),
         ]
     }
 
@@ -329,7 +332,7 @@ impl AnalyticsService {
         amount_in: U256,
         path: &[Address],
     ) -> Result<U256, EvmError> {
-        let pancake_service = PancakeSwapService::new(self.client.clone());
+        let pancake_service = PancakeSwapService::new(self.evm.clone());
 
         match self.get_router_version(router_address) {
             RouterVersion::V2 => {
@@ -398,17 +401,16 @@ impl AnalyticsService {
         token0: Address,
         token1: Address,
     ) -> Result<f64, EvmError> {
-        let price_service = PriceService::new(self.client.clone());
-
+        let price_service = PriceService::new(self.evm.clone());
         // Determine base token for pricing based on chain
-        let base_token = match self.client.chain {
-            crate::EvmType::Bsc => {
+        let base_token = match self.evm.client.evm_type {
+            Some(EvmType::BSC_MAINNET) => {
                 // Use BUSD as base on BSC
                 "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56"
                     .parse()
                     .map_err(|_| EvmError::ConfigError("Invalid BUSD address".to_string()))?
             }
-            crate::EvmType::Ethereum => {
+            Some(EvmType::ETHEREUM_MAINNET) => {
                 // Use USDC as base on Ethereum
                 "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
                     .parse()
@@ -416,11 +418,11 @@ impl AnalyticsService {
             }
             _ => {
                 // Use chain's native wrapped token as fallback
-                match self.client.chain {
-                    crate::EvmType::Bsc => "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"
+                match self.evm.client.evm_type {
+                    Some(EvmType::BSC_MAINNET) => "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"
                         .parse()
                         .unwrap(),
-                    crate::EvmType::Ethereum => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+                    Some(EvmType::ETHEREUM_MAINNET) => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
                         .parse()
                         .unwrap(),
                     _ => {
@@ -478,8 +480,7 @@ impl AnalyticsService {
         token: Address,
         base_token: Address,
     ) -> Option<f64> {
-        let pancake_service = PancakeSwapService::new(self.client.clone());
-
+        let pancake_service = PancakeSwapService::new(self.evm.clone());
         // Try direct pair first
         if let Ok(amounts) = pancake_service
             .get_amounts_out_v2(U256::from(10_u64.pow(18)), vec![token, base_token])
@@ -489,7 +490,6 @@ impl AnalyticsService {
                 return Some(amount_out.as_u128() as f64 / 1e18);
             }
         }
-
         // Try via common intermediate tokens
         let common_tokens = self.get_common_intermediate_tokens();
         for intermediate in common_tokens {
@@ -517,11 +517,11 @@ impl AnalyticsService {
 
     /// Helper function to get USD stablecoin address
     fn get_usd_stablecoin_address(&self) -> Result<Address, EvmError> {
-        match self.client.chain {
-            crate::EvmType::Bsc => "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56"
+        match self.evm.client.evm_type {
+            Some(EvmType::BSC_MAINNET) => "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56"
                 .parse()
                 .map_err(|_| EvmError::ConfigError("Invalid BUSD address".to_string())),
-            crate::EvmType::Ethereum => "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+            Some(EvmType::ETHEREUM_MAINNET) => "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
                 .parse()
                 .map_err(|_| EvmError::ConfigError("Invalid USDC address".to_string())),
             _ => Err(EvmError::ConfigError("Unsupported chain".to_string())),
@@ -537,8 +537,8 @@ impl AnalyticsService {
 
     /// Helper function to get common intermediate tokens for price routing
     fn get_common_intermediate_tokens(&self) -> Vec<Address> {
-        match self.client.chain {
-            crate::EvmType::Bsc => vec![
+        match self.evm.client.evm_type {
+            Some(EvmType::BSC_MAINNET) => vec![
                 "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"
                     .parse()
                     .unwrap(), // WBNB
@@ -549,7 +549,7 @@ impl AnalyticsService {
                     .parse()
                     .unwrap(), // USDT
             ],
-            crate::EvmType::Ethereum => vec![
+            Some(EvmType::ETHEREUM_MAINNET) => vec![
                 "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
                     .parse()
                     .unwrap(), // WETH
@@ -566,8 +566,8 @@ impl AnalyticsService {
 
     /// Helper function to get stablecoin addresses
     fn get_stablecoin_addresses(&self) -> Vec<Address> {
-        match self.client.chain {
-            crate::EvmType::Bsc => vec![
+        match self.evm.client.evm_type {
+            Some(EvmType::BSC_MAINNET) => vec![
                 "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56"
                     .parse()
                     .unwrap(), // BUSD
@@ -578,7 +578,7 @@ impl AnalyticsService {
                     .parse()
                     .unwrap(), // USDC
             ],
-            crate::EvmType::Ethereum => vec![
+            Some(EvmType::ETHEREUM_MAINNET) => vec![
                 "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
                     .parse()
                     .unwrap(), // USDC
@@ -608,13 +608,16 @@ impl AnalyticsService {
     /// }
     /// ```
     pub async fn cal_volume_24h(&self, pair_address: Address) -> Result<f64, EvmError> {
-        let current_block =
-            self.client.provider.get_block_number().await.map_err(|e| {
-                EvmError::ConnectionError(format!("Failed to get block number: {}", e))
-            })?;
-        let blocks_per_day = match self.client.chain {
-            crate::EvmType::Bsc => 28800u64,
-            crate::EvmType::Ethereum => 7200u64,
+        let current_block = self
+            .evm
+            .client
+            .provider
+            .get_block_number()
+            .await
+            .map_err(|e| EvmError::ConnectionError(format!("Failed to get block number: {}", e)))?;
+        let blocks_per_day = match self.evm.client.evm_type {
+            Some(EvmType::BSC_MAINNET) => 28800u64,
+            Some(EvmType::ETHEREUM_MAINNET) => 7200u64,
             _ => 7200u64,
         };
         let from_block = current_block - blocks_per_day;
@@ -624,6 +627,7 @@ impl AnalyticsService {
             .to_block(BlockNumber::Number(current_block.into()))
             .event("Swap(address,uint256,uint256,uint256,uint256,address)");
         let logs = self
+            .evm
             .client
             .provider
             .get_logs(&filter)
@@ -646,7 +650,7 @@ impl AnalyticsService {
         pair_address: Address,
         base_token: Address,
     ) -> Result<f64, EvmError> {
-        let liquidity_service = LiquidityService::new(self.client.clone());
+        let liquidity_service = LiquidityService::new(self.evm.clone());
         let pool_info = liquidity_service.get_pool_info(pair_address).await?;
         let current_price = pool_info.cal_price(base_token)?;
         let (reserve0, reserve1, _) = liquidity_service.get_reserves(pair_address).await?;
@@ -676,13 +680,16 @@ impl AnalyticsService {
     /// }
     /// ```
     pub async fn cal_trades_24h(&self, pair_address: Address) -> Result<u64, EvmError> {
-        let current_block =
-            self.client.provider.get_block_number().await.map_err(|e| {
-                EvmError::ConnectionError(format!("Failed to get block number: {}", e))
-            })?;
-        let blocks_per_day = match self.client.chain {
-            crate::EvmType::Bsc => 28800u64,
-            crate::EvmType::Ethereum => 7200u64,
+        let current_block = self
+            .evm
+            .client
+            .provider
+            .get_block_number()
+            .await
+            .map_err(|e| EvmError::ConnectionError(format!("Failed to get block number: {}", e)))?;
+        let blocks_per_day = match self.evm.client.evm_type {
+            Some(EvmType::BSC_MAINNET) => 28800u64,
+            Some(EvmType::ETHEREUM_MAINNET) => 7200u64,
             _ => 7200u64,
         };
         let from_block = current_block - blocks_per_day;
@@ -692,6 +699,7 @@ impl AnalyticsService {
             .to_block(BlockNumber::Number(current_block.into()))
             .event("Swap(address,uint256,uint256,uint256,uint256,address)");
         let logs = self
+            .evm
             .client
             .provider
             .get_logs(&filter)
@@ -722,7 +730,7 @@ impl AnalyticsService {
         factory_address: Address,
         limit: usize,
     ) -> Result<Vec<PairAnalytics>, EvmError> {
-        let liquidity_service = LiquidityService::new(self.client.clone());
+        let liquidity_service = LiquidityService::new(self.evm.clone());
         let all_pairs = liquidity_service
             .get_all_pairs(factory_address, 0, 1000)
             .await?;

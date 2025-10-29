@@ -1,5 +1,5 @@
 use crate::{
-    EvmClient, EvmError,
+    EvmError,
     abi::{IPancakeRouter02, ISwapRouter},
 };
 use ethers::{
@@ -8,6 +8,7 @@ use ethers::{
     signers::{Signer, Wallet},
     types::{Address, U256},
 };
+use evm_sdk::Evm;
 use std::sync::Arc;
 
 type SignerClient =
@@ -15,22 +16,22 @@ type SignerClient =
 
 /// Router service for interacting with PancakeSwap V2 and V3 routers
 pub struct RouterService {
-    client: Arc<EvmClient>,
+    evm: Arc<Evm>,
 }
 
 impl RouterService {
-    pub fn new(client: Arc<EvmClient>) -> Self {
-        Self { client }
+    pub fn new(evm: Arc<Evm>) -> Self {
+        Self { evm: evm }
     }
 
     /// Get V2 router contract instance for read-only operations
     pub fn v2_router(&self, router_address: Address) -> IPancakeRouter02<Provider<Http>> {
-        IPancakeRouter02::new(router_address, self.client.provider.clone())
+        IPancakeRouter02::new(router_address, self.evm.client.provider.clone())
     }
 
     /// Get V3 router contract instance for read-only operations
     pub fn v3_router(&self, router_address: Address) -> ISwapRouter<Provider<Http>> {
-        ISwapRouter::new(router_address, self.client.provider.clone())
+        ISwapRouter::new(router_address, self.evm.client.provider.clone())
     }
 
     /// Get V2 router contract instance with signer for transaction operations
@@ -39,11 +40,13 @@ impl RouterService {
         router_address: Address,
     ) -> Result<IPancakeRouter02<SignerClient>, EvmError> {
         let wallet = self
+            .evm
             .client
             .wallet
             .as_ref()
             .ok_or_else(|| EvmError::WalletError("No wallet configured".to_string()))?;
-        let signer_middleware = SignerMiddleware::new(self.client.provider.clone(), wallet.clone());
+        let signer_middleware =
+            SignerMiddleware::new(self.evm.client.provider.clone(), wallet.clone());
         Ok(IPancakeRouter02::new(
             router_address,
             Arc::new(signer_middleware),
@@ -56,11 +59,11 @@ impl RouterService {
         router_address: Address,
     ) -> Result<ISwapRouter<SignerClient>, EvmError> {
         let wallet = self
-            .client
+            .evm.client
             .wallet
             .as_ref()
             .ok_or_else(|| EvmError::WalletError("No wallet configured".to_string()))?;
-        let signer_middleware = SignerMiddleware::new(self.client.provider.clone(), wallet.clone());
+        let signer_middleware = SignerMiddleware::new(self.evm.client.provider.clone(), wallet.clone());
         Ok(ISwapRouter::new(
             router_address,
             Arc::new(signer_middleware),
@@ -105,7 +108,7 @@ impl RouterService {
         deadline: u64,
     ) -> Result<ethers::types::H256, EvmError> {
         let router = self.v2_router_signer(router_address)?;
-        let wallet_address = self.client.wallet.as_ref().unwrap().address();
+        let wallet_address = self.evm.client.wallet.as_ref().unwrap().address();
 
         let tx = router.swap_exact_tokens_for_tokens_supporting_fee_on_transfer_tokens(
             amount_in,
@@ -160,7 +163,7 @@ impl RouterService {
         deadline: u64,
     ) -> Result<ethers::types::H256, EvmError> {
         let router = self.v2_router_signer(router_address)?;
-        let wallet_address = self.client.wallet.as_ref().unwrap().address();
+        let wallet_address = self.evm.client.wallet.as_ref().unwrap().address();
 
         let tx = router
             .swap_exact_eth_for_tokens_supporting_fee_on_transfer_tokens(
@@ -219,7 +222,7 @@ impl RouterService {
         deadline: u64,
     ) -> Result<ethers::types::H256, EvmError> {
         let router = self.v2_router_signer(router_address)?;
-        let wallet_address = self.client.wallet.as_ref().unwrap().address();
+        let wallet_address = self.evm.client.wallet.as_ref().unwrap().address();
 
         let tx = router.swap_exact_tokens_for_eth_supporting_fee_on_transfer_tokens(
             amount_in,

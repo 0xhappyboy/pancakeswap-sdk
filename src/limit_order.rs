@@ -1,5 +1,6 @@
-use crate::{EvmClient, EvmError, PancakeSwapConfig, PancakeSwapService, price::PriceService};
+use crate::{EvmError, PancakeSwapConfig, PancakeSwapService, price::PriceService};
 use ethers::types::{Address, U256};
+use evm_sdk::Evm;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::time::{Duration, interval};
@@ -32,15 +33,15 @@ pub struct LimitOrder {
 
 /// Service for managing and executing limit orders
 pub struct LimitOrderService {
-    client: Arc<EvmClient>,
+    evm: Arc<Evm>,
     pending_orders: HashMap<U256, LimitOrder>,
 }
 
 impl LimitOrderService {
     /// Creates a new LimitOrderService instance
-    pub fn new(client: Arc<EvmClient>) -> Self {
+    pub fn new(evm: Arc<Evm>) -> Self {
         Self {
-            client,
+            evm,
             pending_orders: HashMap::new(),
         }
     }
@@ -139,7 +140,7 @@ impl LimitOrderService {
         token_out: Address,
         amount_in: U256,
     ) -> Result<f64, EvmError> {
-        let price_service = PriceService::new(self.client.clone());
+        let price_service = PriceService::new(self.evm.clone());
         let amount_out = price_service
             .get_price(router_address, token_in, token_out, amount_in)
             .await?;
@@ -165,7 +166,7 @@ impl LimitOrderService {
         order_id: U256,
         router_address: Address,
     ) -> Result<(), EvmError> {
-        let client = self.client.clone();
+        let client = self.evm.client.clone();
         let mut interval = interval(Duration::from_secs(10)); // 每10秒检查一次
         tokio::spawn(async move { todo!() });
         Ok(())
@@ -208,7 +209,7 @@ impl LimitOrderService {
         {
             return Err(EvmError::LimitOrderError("Order has expired".to_string()));
         }
-        let pancake_service = PancakeSwapService::new(self.client.clone());
+        let pancake_service = PancakeSwapService::new(self.evm.clone());
         let tx_hash = pancake_service
             .swap_exact_tokens_for_tokens(
                 order.amount_in,
@@ -316,7 +317,7 @@ impl LimitOrderService {
             .ok_or_else(|| EvmError::LimitOrderError("Order not found".to_string()))?;
         let current_price = self
             .get_current_price(
-                PancakeSwapConfig::v2_router_address(self.client.chain)?,
+                PancakeSwapConfig::v2_router_address(self.evm.client.evm_type.unwrap())?,
                 order.token_in,
                 order.token_out,
                 order.amount_in,

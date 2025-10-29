@@ -1,5 +1,7 @@
-use crate::{EvmClient, EvmError};
+use crate::EvmError;
 use ethers::types::{Address, U256};
+use evm_client::EvmType;
+use evm_sdk::Evm;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
@@ -13,14 +15,14 @@ pub struct PriceHistory {
 
 /// Service for fetching and managing token prices
 pub struct PriceService {
-    client: Arc<EvmClient>,
+    evm: Arc<Evm>,
     price_history: HashMap<Address, VecDeque<PriceHistory>>,
 }
 
 impl PriceService {
-    pub fn new(client: Arc<EvmClient>) -> Self {
+    pub fn new(evm: Arc<Evm>) -> Self {
         Self {
-            client,
+            evm: evm,
             price_history: HashMap::new(),
         }
     }
@@ -49,7 +51,7 @@ impl PriceService {
         amount_in: U256,
     ) -> Result<U256, EvmError> {
         let router =
-            crate::abi::IPancakeRouter02::new(router_address, self.client.provider.clone());
+            crate::abi::IPancakeRouter02::new(router_address, self.evm.client.provider.clone());
         let path = vec![token_in, token_out];
         let amounts = router
             .get_amounts_out(amount_in, path)
@@ -150,7 +152,7 @@ impl PriceService {
             }
             let path = vec![token, intermediate, base_token];
             let router =
-                crate::abi::IPancakeRouter02::new(router_address, self.client.provider.clone());
+                crate::abi::IPancakeRouter02::new(router_address, self.evm.client.provider.clone());
             match router.get_amounts_out(amount_in, path).call().await {
                 Ok(amounts) => {
                     if amounts.len() >= 3 {
@@ -169,13 +171,13 @@ impl PriceService {
     }
 
     fn get_default_router(&self) -> Result<Address, EvmError> {
-        match self.client.chain {
-            crate::EvmType::Bsc => {
+        match self.evm.client.evm_type {
+            Some(EvmType::BSC_MAINNET) => {
                 "0x10ED43C718714eb63d5aA57B78B54704E256024E" // PancakeSwap V2 Router
                     .parse()
                     .map_err(|_| EvmError::ConfigError("Invalid router address".to_string()))
             }
-            crate::EvmType::Ethereum => {
+            Some(EvmType::ETHEREUM_MAINNET) => {
                 "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D" // Uniswap V2 Router
                     .parse()
                     .map_err(|_| EvmError::ConfigError("Invalid router address".to_string()))
@@ -185,8 +187,8 @@ impl PriceService {
     }
 
     fn get_common_intermediate_tokens(&self) -> Vec<Address> {
-        match self.client.chain {
-            crate::EvmType::Bsc => vec![
+        match self.evm.client.evm_type {
+            Some(EvmType::BSC_MAINNET) => vec![
                 // WBNB
                 "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"
                     .parse()
@@ -200,7 +202,7 @@ impl PriceService {
                     .parse()
                     .unwrap(),
             ],
-            crate::EvmType::Ethereum => vec![
+            Some(EvmType::ETHEREUM_MAINNET) => vec![
                 // WETH
                 "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
                     .parse()
@@ -239,7 +241,7 @@ impl PriceService {
         token_in: Address,
         amount_in: U256,
     ) -> Result<U256, EvmError> {
-        let liquidity_service = crate::liquidity::LiquidityService::new(self.client.clone());
+        let liquidity_service = crate::liquidity::LiquidityService::new(self.evm.clone());
         let pool_info = liquidity_service.get_pool_info(pair_address).await?;
         if pool_info.reserve0.is_zero() || pool_info.reserve1.is_zero() {
             return Err(EvmError::CalculationError("Reserves are zero".to_string()));
@@ -282,7 +284,7 @@ impl PriceService {
         token_out: Address,
         amount_in: U256,
     ) -> Result<f64, EvmError> {
-        let price_service = PriceService::new(self.client.clone());
+        let price_service = PriceService::new(self.evm.clone());
         let current_price = price_service
             .get_price(
                 router_address,
@@ -349,7 +351,7 @@ impl PriceService {
             }
             let path = vec![token_in, intermediate, token_out];
             let router =
-                crate::abi::IPancakeRouter02::new(router_address, self.client.provider.clone());
+                crate::abi::IPancakeRouter02::new(router_address, self.evm.client.provider.clone());
             match router.get_amounts_out(amount_in, path.clone()).call().await {
                 Ok(amounts) => {
                     if amounts.len() >= 3 {
@@ -497,7 +499,7 @@ impl PriceService {
         pair_address: Address,
         base_token: Address,
     ) -> Result<f64, EvmError> {
-        let liquidity_service = crate::liquidity::LiquidityService::new(self.client.clone());
+        let liquidity_service = crate::liquidity::LiquidityService::new(self.evm.clone());
         let pool_info = liquidity_service.get_pool_info(pair_address).await?;
         let current_price = pool_info.cal_price(base_token)?;
         let (reserve0, reserve1, _) = liquidity_service.get_reserves(pair_address).await?;

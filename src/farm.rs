@@ -1,7 +1,8 @@
+use crate::EvmError;
 use crate::abi::{IMasterChefV2, IPancakePair, ISmartChefFactory, ISmartChefInitializable};
-use crate::{EvmClient, EvmError};
 use ethers::middleware::SignerMiddleware;
 use ethers::types::{Address, U256};
+use evm_sdk::Evm;
 use std::sync::Arc;
 
 /// Farm pool information
@@ -54,12 +55,12 @@ pub struct UserSyrupPoolInfo {
 
 /// Service for interacting with farming and staking protocols
 pub struct FarmingService {
-    client: Arc<EvmClient>,
+    evm: Arc<Evm>,
 }
 
 impl FarmingService {
-    pub fn new(client: Arc<EvmClient>) -> Self {
-        Self { client }
+    pub fn new(evm: Arc<Evm>) -> Self {
+        Self { evm: evm }
     }
 
     /// Gets the total number of pools in the master chef contract
@@ -76,7 +77,7 @@ impl FarmingService {
     /// }
     /// ```
     pub async fn pool_length(&self, master_chef_address: Address) -> Result<U256, EvmError> {
-        let master_chef = IMasterChefV2::new(master_chef_address, self.client.provider.clone());
+        let master_chef = IMasterChefV2::new(master_chef_address, self.evm.client.provider.clone());
         master_chef
             .pool_length()
             .call()
@@ -132,7 +133,7 @@ impl FarmingService {
         master_chef_address: Address,
         pid: u64,
     ) -> Result<FarmInfo, EvmError> {
-        let master_chef = IMasterChefV2::new(master_chef_address, self.client.provider.clone());
+        let master_chef = IMasterChefV2::new(master_chef_address, self.evm.client.provider.clone());
         let pool_info = master_chef
             .pool_info(pid.into())
             .call()
@@ -150,7 +151,7 @@ impl FarmingService {
         } else {
             cake_per_block * pool_info.1 / total_alloc_point
         };
-        let lp_token = IPancakePair::new(pool_info.0, self.client.provider.clone());
+        let lp_token = IPancakePair::new(pool_info.0, self.evm.client.provider.clone());
         let total_lp = lp_token.total_supply().call().await.unwrap_or(U256::zero());
         Ok(FarmInfo {
             pid,
@@ -185,7 +186,7 @@ impl FarmingService {
         pid: u64,
         user_address: Address,
     ) -> Result<UserFarmInfo, EvmError> {
-        let master_chef = IMasterChefV2::new(master_chef_address, self.client.provider.clone());
+        let master_chef = IMasterChefV2::new(master_chef_address, self.evm.client.provider.clone());
         let user_info = master_chef
             .user_info(pid.into(), user_address)
             .call()
@@ -203,7 +204,7 @@ impl FarmingService {
             .call()
             .await
             .map_err(|e| EvmError::ContractError(format!("Failed to get pool info: {}", e)))?;
-        let lp_token = IPancakePair::new(pool_info.0, self.client.provider.clone());
+        let lp_token = IPancakePair::new(pool_info.0, self.evm.client.provider.clone());
         let lp_balance = lp_token
             .balance_of(user_address)
             .call()
@@ -238,7 +239,7 @@ impl FarmingService {
         smart_chef_factory_address: Address,
     ) -> Result<Vec<SyrupPoolInfo>, EvmError> {
         let factory =
-            ISmartChefFactory::new(smart_chef_factory_address, self.client.provider.clone());
+            ISmartChefFactory::new(smart_chef_factory_address, self.evm.client.provider.clone());
         // Strategy 1: Try to get the pool list through the factory contract method
         if let Ok(pools) = self.get_pools_via_factory_methods(&factory).await {
             if !pools.is_empty() {
@@ -403,7 +404,7 @@ impl FarmingService {
                 .from_block(BlockNumber::Earliest)
                 .to_block(BlockNumber::Latest);
 
-            match self.client.provider.get_logs(&filter).await {
+            match self.evm.client.provider.get_logs(&filter).await {
                 Ok(logs) => {
                     for log in logs {
                         if let Some(pool_address) = self.extract_address_from_log(&log) {
@@ -489,9 +490,9 @@ impl FarmingService {
         let mut tasks = Vec::new();
 
         for pool_address in pool_addresses {
-            let client = Arc::clone(&self.client);
+            let evm = Arc::clone(&self.evm);
             let task = tokio::spawn(async move {
-                let service = FarmingService::new(client);
+                let service = FarmingService::new(evm);
                 service.get_syrup_pool_info(pool_address).await
             });
             tasks.push((pool_address, task));
@@ -525,7 +526,7 @@ impl FarmingService {
         &self,
         pool_address: Address,
     ) -> Result<SyrupPoolInfo, EvmError> {
-        let pool = ISmartChefInitializable::new(pool_address, self.client.provider.clone());
+        let pool = ISmartChefInitializable::new(pool_address, self.evm.client.provider.clone());
         let staked_token =
             pool.staked_token().call().await.map_err(|e| {
                 EvmError::ContractError(format!("Failed to get staked token: {}", e))
@@ -616,7 +617,7 @@ impl FarmingService {
         pool_address: Address,
         user_address: Address,
     ) -> Result<UserSyrupPoolInfo, EvmError> {
-        let pool = ISmartChefInitializable::new(pool_address, self.client.provider.clone());
+        let pool = ISmartChefInitializable::new(pool_address, self.evm.client.provider.clone());
         let user_info = pool
             .user_info(user_address)
             .call()
@@ -656,11 +657,12 @@ impl FarmingService {
         amount: U256,
     ) -> Result<ethers::types::H256, EvmError> {
         let wallet = self
+            .evm
             .client
             .wallet
             .as_ref()
             .ok_or_else(|| EvmError::WalletError("No wallet configured".to_string()))?;
-        let provider = self.client.provider.clone();
+        let provider = self.evm.client.provider.clone();
         let client = Arc::new(SignerMiddleware::new(provider, wallet.clone()));
         let master_chef = IMasterChefV2::new(master_chef_address, client);
         let tx = master_chef.deposit(pid.into(), amount);
@@ -693,11 +695,12 @@ impl FarmingService {
         amount: U256,
     ) -> Result<ethers::types::H256, EvmError> {
         let wallet = self
+            .evm
             .client
             .wallet
             .as_ref()
             .ok_or_else(|| EvmError::WalletError("No wallet configured".to_string()))?;
-        let provider = self.client.provider.clone();
+        let provider = self.evm.client.provider.clone();
         let client = Arc::new(SignerMiddleware::new(provider, wallet.clone()));
         let master_chef = IMasterChefV2::new(master_chef_address, client);
         let tx = master_chef.withdraw(pid.into(), amount);
@@ -726,11 +729,12 @@ impl FarmingService {
         pid: u64,
     ) -> Result<ethers::types::H256, EvmError> {
         let wallet = self
+            .evm
             .client
             .wallet
             .as_ref()
             .ok_or_else(|| EvmError::WalletError("No wallet configured".to_string()))?;
-        let provider = self.client.provider.clone();
+        let provider = self.evm.client.provider.clone();
         let client = Arc::new(SignerMiddleware::new(provider, wallet.clone()));
         let master_chef = IMasterChefV2::new(master_chef_address, client);
         let tx = master_chef.emergency_withdraw(pid.into());

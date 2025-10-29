@@ -1,14 +1,5 @@
-use ethers::types::{Address, Bytes};
+use ethers::types::Address;
 use std::str::FromStr;
-
-pub mod rpc {
-    pub const ETHEREUM_RPC: &str = "https://reth-ethereum.ithaca.xyz/rpc";
-    pub const BASE_RPC: &str = "https://mainnet.base.org";
-    pub const ARB_RPC: &str = "https://arb1.arbitrum.io/rpc";
-    pub const BSC_RPC: &str = "https://bsc-dataseed.binance.org/";
-    pub const HYPEREVM_RPC: &str = "";
-    pub const PLASMA_RPC: &str = "";
-}
 
 // BSC V2
 pub const BSC_FACTORY_V2: &str = "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73";
@@ -45,15 +36,6 @@ pub const BSC_STABLE_SWAP_ROUTER: &str = "0x1698a2220f472A2d18e8D0f268F8e277B21c
 pub const BSC_MASTERCHEF_V2: &str = "0xa5f8C5Dbd5F286960b9d90548680aE5ebFf07652";
 pub const BSC_POSITION_MANAGER: &str = "0x46A15B0b27311cedF172AB29E4f4766fbE7F4364";
 pub const FOUR_MEME_ADDRESS: &str = "0x5c952063c7fc8610FFDB798152D69F0B9550762b";
-
-pub mod chain_ids {
-    pub const ETHEREUM: u64 = 1;
-    pub const POLYGON: u64 = 137;
-    pub const ARBITRUM: u64 = 42161;
-    pub const OPTIMISM: u64 = 10;
-    pub const BASE: u64 = 8453;
-    pub const BSC: u64 = 56;
-}
 
 pub fn parse_address(address_str: &str) -> Result<Address, Box<dyn std::error::Error>> {
     Ok(Address::from_str(address_str)?)

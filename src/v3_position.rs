@@ -1,11 +1,12 @@
 use crate::{
-    EvmClient, EvmError,
+    EvmError,
     abi::{INonfungiblePositionManager, i_nonfungible_position_manager},
 };
 use ethers::{
     middleware::SignerMiddleware,
     types::{Address, U256},
 };
+use evm_sdk::Evm;
 use std::sync::Arc;
 
 /// Represents a Uniswap V3 position
@@ -26,13 +27,13 @@ pub struct V3Position {
 
 /// Service for managing Uniswap V3 positions
 pub struct V3PositionService {
-    client: Arc<EvmClient>,
+    evm: Arc<Evm>,
 }
 
 impl V3PositionService {
     /// Creates a new V3PositionService instance
-    pub fn new(client: Arc<EvmClient>) -> Self {
-        Self { client }
+    pub fn new(evm: Arc<Evm>) -> Self {
+        Self { evm: evm }
     }
 
     /// Retrieves all V3 positions for a given user
@@ -63,8 +64,10 @@ impl V3PositionService {
         nft_position_manager: Address,
         user_address: Address,
     ) -> Result<Vec<V3Position>, EvmError> {
-        let nft_manager =
-            INonfungiblePositionManager::new(nft_position_manager, self.client.provider.clone());
+        let nft_manager = INonfungiblePositionManager::new(
+            nft_position_manager,
+            self.evm.client.provider.clone(),
+        );
         let balance = nft_manager
             .balance_of(user_address)
             .call()
@@ -112,8 +115,10 @@ impl V3PositionService {
         nft_position_manager: Address,
         token_id: U256,
     ) -> Result<V3Position, EvmError> {
-        let nft_manager =
-            INonfungiblePositionManager::new(nft_position_manager, self.client.provider.clone());
+        let nft_manager = INonfungiblePositionManager::new(
+            nft_position_manager,
+            self.evm.client.provider.clone(),
+        );
         let position = nft_manager
             .positions(token_id)
             .call()
@@ -197,11 +202,12 @@ impl V3PositionService {
         deadline: u64,
     ) -> Result<ethers::types::H256, EvmError> {
         let wallet = self
+            .evm
             .client
             .wallet
             .as_ref()
             .ok_or_else(|| EvmError::WalletError("No wallet configured".to_string()))?;
-        let provider = self.client.provider.clone();
+        let provider = self.evm.client.provider.clone();
         let client = Arc::new(SignerMiddleware::new(provider, wallet.clone()));
         let nft_manager = INonfungiblePositionManager::new(nft_position_manager, client);
         let params = i_nonfungible_position_manager::MintParams {
@@ -273,11 +279,12 @@ impl V3PositionService {
         deadline: u64,
     ) -> Result<ethers::types::H256, EvmError> {
         let wallet = self
+            .evm
             .client
             .wallet
             .as_ref()
             .ok_or_else(|| EvmError::WalletError("No wallet configured".to_string()))?;
-        let provider = self.client.provider.clone();
+        let provider = self.evm.client.provider.clone();
         let client = Arc::new(SignerMiddleware::new(provider, wallet.clone()));
         let nft_manager = INonfungiblePositionManager::new(nft_position_manager, client);
         let params = i_nonfungible_position_manager::IncreaseLiquidityParams {
@@ -339,11 +346,12 @@ impl V3PositionService {
         deadline: u64,
     ) -> Result<ethers::types::H256, EvmError> {
         let wallet = self
+            .evm
             .client
             .wallet
             .as_ref()
             .ok_or_else(|| EvmError::WalletError("No wallet configured".to_string()))?;
-        let provider = self.client.provider.clone();
+        let provider = self.evm.client.provider.clone();
         let client = Arc::new(SignerMiddleware::new(provider, wallet.clone()));
         let nft_manager = INonfungiblePositionManager::new(nft_position_manager, client);
         let params = i_nonfungible_position_manager::DecreaseLiquidityParams {
@@ -402,11 +410,12 @@ impl V3PositionService {
         amount1_max: U256,
     ) -> Result<ethers::types::H256, EvmError> {
         let wallet = self
+            .evm
             .client
             .wallet
             .as_ref()
             .ok_or_else(|| EvmError::WalletError("No wallet configured".to_string()))?;
-        let provider = self.client.provider.clone();
+        let provider = self.evm.client.provider.clone();
         let client = Arc::new(SignerMiddleware::new(provider, wallet.clone()));
         let nft_manager = INonfungiblePositionManager::new(nft_position_manager, client);
         let params = i_nonfungible_position_manager::CollectParams {

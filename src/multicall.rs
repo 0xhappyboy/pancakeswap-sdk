@@ -1,11 +1,12 @@
 use crate::{
-    EvmClient, EvmError,
+    EvmError,
     abi::{IERC20, IMulticall, IPancakePair, IPancakeRouter02, i_multicall},
 };
 use ethers::{
     abi::AbiDecode,
     types::{Address, U256},
 };
+use evm_sdk::Evm;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -19,13 +20,13 @@ pub struct MulticallResult {
 
 /// Service for executing multiple Ethereum calls in a single transaction
 pub struct MulticallService {
-    client: Arc<EvmClient>,
+    evm: Arc<Evm>,
 }
 
 impl MulticallService {
     /// Creates a new MulticallService instance
-    pub fn new(client: Arc<EvmClient>) -> Self {
-        Self { client }
+    pub fn new(evm: Arc<Evm>) -> Self {
+        Self { evm: evm }
     }
 
     /// Executes a batch of calls using the multicall contract
@@ -49,7 +50,7 @@ impl MulticallService {
         multicall_address: Address,
         calls: Vec<Call>,
     ) -> Result<Vec<MulticallResult>, EvmError> {
-        let multicall = IMulticall::new(multicall_address, self.client.provider.clone());
+        let multicall = IMulticall::new(multicall_address, self.evm.client.provider.clone());
         let call_data: Vec<i_multicall::Call> = calls
             .into_iter()
             .map(|call| i_multicall::Call {
@@ -94,7 +95,7 @@ impl MulticallService {
     ) -> Result<HashMap<Address, U256>, EvmError> {
         let mut calls = Vec::new();
         for token_address in &token_addresses {
-            let erc20 = IERC20::new(*token_address, self.client.provider.clone());
+            let erc20 = IERC20::new(*token_address, self.evm.client.provider.clone());
             let call_data = erc20.balance_of(user_address).calldata().ok_or_else(|| {
                 EvmError::ContractError("Failed to encode balanceOf call".to_string())
             })?;
@@ -144,7 +145,7 @@ impl MulticallService {
     ) -> Result<HashMap<Address, (U256, U256, u32)>, EvmError> {
         let mut calls = Vec::new();
         for pair_address in &pair_addresses {
-            let pair = IPancakePair::new(*pair_address, self.client.provider.clone());
+            let pair = IPancakePair::new(*pair_address, self.evm.client.provider.clone());
             let call_data = pair.get_reserves().calldata().ok_or_else(|| {
                 EvmError::ContractError("Failed to encode getReserves call".to_string())
             })?;
@@ -194,7 +195,7 @@ impl MulticallService {
     ) -> Result<HashMap<(Address, Address), U256>, EvmError> {
         let mut calls = Vec::new();
         for (token_in, token_out) in &token_pairs {
-            let router = IPancakeRouter02::new(router_address, self.client.provider.clone());
+            let router = IPancakeRouter02::new(router_address, self.evm.client.provider.clone());
             let path = vec![*token_in, *token_out];
             let call_data = router
                 .get_amounts_out(amount_in, path.clone())
@@ -244,7 +245,7 @@ impl MulticallService {
         let mut calls = Vec::new();
         for token_address in &token_addresses {
             for user_address in &user_addresses {
-                let erc20 = IERC20::new(*token_address, self.client.provider.clone());
+                let erc20 = IERC20::new(*token_address, self.evm.client.provider.clone());
                 let call_data = erc20.balance_of(*user_address).calldata().ok_or_else(|| {
                     EvmError::ContractError("Failed to encode balanceOf call".to_string())
                 })?;
